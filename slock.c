@@ -141,12 +141,32 @@ drawdots(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
         int cy = sheight / 2;
         int x;
 
-        XClearArea(
-                dpy, w,
-                dotsize / 2, cy - dotarea / 2,
-                swidth - dotsize, dotarea,
-                0
-        );
+        if (len == 1) {
+                XClearArea(
+                        dpy, w,
+                        dotsize / 4, dotsize / 4,
+                        swidth - dotsize / 2, sheight - dotsize / 2,
+                        0
+                );
+        } else {
+                XClearArea(
+                        dpy, w,
+                        dotsize / 2, cy - dotarea / 2,
+                        swidth - dotsize, dotarea,
+                        0
+                );
+        }
+
+        if (len == 0) {
+                XSegment segments[2] = {
+                        { 0, 0,       swidth, sheight },
+                        { 0, sheight, swidth, 0 }
+                };
+                XDrawSegments(
+                        dpy, w, gc,
+                        segments, 2
+                );
+        }
 
         x = cx - dotarea * (len / 2) + ((len % 2 == 0) ? dotarea/2 : 0);
         for (int i = 0; i < len; i++) {
@@ -203,6 +223,14 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                         gcs[screen],
                         dims[screen].width,
                         dims[screen].height
+                );
+                drawdots(
+                        dpy,
+                        locks[screen]->win,
+                        gcs[screen],
+                        dims[screen].width,
+                        dims[screen].height,
+                        0
                 );
         }
 
