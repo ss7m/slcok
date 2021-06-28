@@ -25,9 +25,8 @@
 char *argv0;
 
 enum {
-	INIT,
-	INPUT,
-	FAILED,
+        DEFAULT,
+        FAILED,
 	NUMCOLS
 };
 
@@ -36,6 +35,7 @@ struct lock {
 	Window root, win;
 	Pixmap pmap;
 	unsigned long colors[NUMCOLS];
+        int width, height;
 };
 
 struct xrandr {
@@ -125,6 +125,42 @@ gethash(void)
 }
 
 static void
+drawborder(Display *dpy, Window w, GC gc, int swidth, int sheight)
+{
+        XDrawRectangle(
+                dpy, w, gc,
+                0, 0,
+                swidth, sheight
+        );
+}
+
+static void
+drawdots(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
+{
+        int cx = swidth / 2;
+        int cy = sheight / 2;
+        int x;
+
+        XClearArea(
+                dpy, w,
+                dotsize / 2, cy - dotarea / 2,
+                swidth - dotsize, dotarea,
+                0
+        );
+
+        x = cx - dotarea * (len / 2) + ((len % 2 == 0) ? dotarea/2 : 0);
+        for (int i = 0; i < len; i++) {
+                XFillArc(
+                        dpy, w, gc,
+                        x - dotsize/2, cy - dotsize/2,
+                        dotsize, dotsize,
+                        0, 360 * 64
+                );
+                x += dotarea;
+        }
+}
+
+static void
 readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
        const char *hash)
 {
@@ -134,11 +170,41 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	unsigned int len, color;
 	KeySym ksym;
 	XEvent ev;
+        GC *gcs;
+        struct { int width, height; } *dims;
+
 
 	len = 0;
 	running = 1;
 	failure = 0;
-	oldc = INIT;
+        oldc = DEFAULT;
+
+        gcs = malloc(sizeof(*gcs) * nscreens);
+        dims = malloc(sizeof(*dims) * nscreens);
+        for (screen = 0; screen < nscreens; screen++) {
+                XGCValues values;
+                XWindowAttributes wa;
+
+                values.foreground = 0x6B7089;
+                values.line_width = dotsize / 2;
+                gcs[screen] = XCreateGC(
+                        dpy, locks[screen]->win,
+                        GCForeground | GCLineWidth,
+                        &values
+                );
+
+                XGetWindowAttributes(dpy, locks[screen]->win, &wa);
+                dims[screen].width = wa.width;
+                dims[screen].height = wa.height;
+
+                drawborder(
+                        dpy,
+                        locks[screen]->win,
+                        gcs[screen],
+                        dims[screen].width,
+                        dims[screen].height
+                );
+        }
 
 	while (running && !XNextEvent(dpy, &ev)) {
 		if (ev.type == KeyPress) {
@@ -187,15 +253,32 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				}
 				break;
 			}
-			color = len ? INPUT : ((failure || failonclear) ? FAILED : INIT);
-			if (running && oldc != color) {
+			color = len ? DEFAULT : ((failure || failonclear) ? FAILED : DEFAULT);
+                        if (running) {
 				for (screen = 0; screen < nscreens; screen++) {
-					XSetWindowBackground(dpy,
-					                     locks[screen]->win,
-					                     locks[screen]->colors[color]);
-					XClearWindow(dpy, locks[screen]->win);
+                                        if (oldc != color) {
+                                                XSetWindowBackground(dpy,
+                                                                locks[screen]->win,
+                                                                locks[screen]->colors[color]);
+                                                XClearWindow(dpy, locks[screen]->win);
+                                                drawborder(
+                                                        dpy,
+                                                        locks[screen]->win,
+                                                        gcs[screen],
+                                                        dims[screen].width,
+                                                        dims[screen].height
+                                                );
+                                        }
+                                        drawdots(
+                                                dpy,
+                                                locks[screen]->win,
+                                                gcs[screen],
+                                                dims[screen].width,
+                                                dims[screen].height,
+                                                len
+                                        );
 				}
-				oldc = color;
+                                oldc = color;
 			}
 		} else if (rr->active && ev.type == rr->evbase + RRScreenChangeNotify) {
 			rre = (XRRScreenChangeNotifyEvent*)&ev;
@@ -217,6 +300,12 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				XRaiseWindow(dpy, locks[screen]->win);
 		}
 	}
+
+        for (screen = 0; screen < nscreens; screen++) {
+                XFreeGC(dpy, gcs[screen]);
+        }
+        free(gcs);
+        free(dims);
 }
 
 static struct lock *
@@ -243,7 +332,7 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 
 	/* init */
 	wa.override_redirect = 1;
-	wa.background_pixel = lock->colors[INIT];
+	wa.background_pixel = lock->colors[DEFAULT];
 	lock->win = XCreateWindow(dpy, lock->root, 0, 0,
 	                          DisplayWidth(dpy, lock->screen),
 	                          DisplayHeight(dpy, lock->screen),
