@@ -118,16 +118,6 @@ gethash(void)
 	return hash;
 }
 
-//static void
-//drawborder(Display *dpy, Window w, GC gc, int swidth, int sheight)
-//{
-//        XDrawRectangle(
-//                dpy, w, gc,
-//                0, 0,
-//                swidth, sheight
-//        );
-//}
-
 static void
 drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
 {
