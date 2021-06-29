@@ -25,12 +25,6 @@
 
 char *argv0;
 
-enum {
-        DEFAULT,
-        FAILED,
-	NUMCOLS
-};
-
 struct lock {
 	int screen;
 	Window root, win;
@@ -124,15 +118,15 @@ gethash(void)
 	return hash;
 }
 
-static void
-drawborder(Display *dpy, Window w, GC gc, int swidth, int sheight)
-{
-        XDrawRectangle(
-                dpy, w, gc,
-                0, 0,
-                swidth, sheight
-        );
-}
+//static void
+//drawborder(Display *dpy, Window w, GC gc, int swidth, int sheight)
+//{
+//        XDrawRectangle(
+//                dpy, w, gc,
+//                0, 0,
+//                swidth, sheight
+//        );
+//}
 
 static void
 drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
@@ -223,10 +217,11 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                 dims[screen].width = wa.width;
                 dims[screen].height = wa.height;
 
-                drawborder(
+                XDrawRectangle(
                         dpy,
                         locks[screen]->win,
                         gcs[screen],
+                        0, 0,
                         dims[screen].width,
                         dims[screen].height
                 );
