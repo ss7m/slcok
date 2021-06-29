@@ -34,7 +34,6 @@ struct lock {
 	int screen;
 	Window root, win;
 	Pixmap pmap;
-	unsigned long colors[NUMCOLS];
         int width, height;
 };
 
@@ -140,6 +139,7 @@ drawdots(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
         int cx = swidth / 2;
         int cy = sheight / 2;
         int x;
+        XArc *dots;
 
         if (len == 1) {
                 XClearArea(
@@ -166,17 +166,20 @@ drawdots(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
                         dpy, w, gc,
                         segments, 2
                 );
-        }
+        } else {
 
-        x = cx - dotarea * (len / 2) + ((len % 2 == 0) ? dotarea/2 : 0);
-        for (int i = 0; i < len; i++) {
-                XFillArc(
-                        dpy, w, gc,
-                        x - dotsize/2, cy - dotsize/2,
-                        dotsize, dotsize,
-                        0, 360 * 64
-                );
-                x += dotarea;
+                dots = malloc(sizeof(*dots) * len);
+                x = cx - dotarea * (len / 2) + ((len % 2 == 0) ? dotarea/2 : 0);
+                for (int i = 0; i < len; i++) {
+                        dots[i] = (XArc) {
+                                x - dotsize / 2, cy - dotsize / 2,
+                                dotsize, dotsize,
+                                0, 360 * 64
+                        };
+                        x += dotarea;
+                }
+                XFillArcs(dpy, w, gc, dots, len);
+                free(dots);
         }
 }
 
@@ -186,8 +189,8 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 {
 	XRRScreenChangeNotifyEvent *rre;
 	char buf[32], passwd[256], *inputhash;
-	int num, screen, running, failure, oldc;
-	unsigned int len, color;
+	int num, screen, running;
+	unsigned int len;
 	KeySym ksym;
 	XEvent ev;
         GC *gcs;
@@ -196,8 +199,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 
 	len = 0;
 	running = 1;
-	failure = 0;
-        oldc = DEFAULT;
 
         gcs = malloc(sizeof(*gcs) * nscreens);
         dims = malloc(sizeof(*dims) * nscreens);
@@ -205,7 +206,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                 XGCValues values;
                 XWindowAttributes wa;
 
-                values.foreground = 0x6B7089;
+                values.foreground = foreground;
                 values.line_width = dotsize / 2;
                 gcs[screen] = XCreateGC(
                         dpy, locks[screen]->win,
@@ -260,7 +261,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 					running = !!strcmp(inputhash, hash);
 				if (running) {
 					XBell(dpy, 100);
-					failure = 1;
 				}
 				explicit_bzero(&passwd, sizeof(passwd));
 				len = 0;
@@ -281,22 +281,8 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				}
 				break;
 			}
-			color = len ? DEFAULT : ((failure || failonclear) ? FAILED : DEFAULT);
                         if (running) {
 				for (screen = 0; screen < nscreens; screen++) {
-                                        if (oldc != color) {
-                                                XSetWindowBackground(dpy,
-                                                                locks[screen]->win,
-                                                                locks[screen]->colors[color]);
-                                                XClearWindow(dpy, locks[screen]->win);
-                                                drawborder(
-                                                        dpy,
-                                                        locks[screen]->win,
-                                                        gcs[screen],
-                                                        dims[screen].width,
-                                                        dims[screen].height
-                                                );
-                                        }
                                         drawdots(
                                                 dpy,
                                                 locks[screen]->win,
@@ -306,7 +292,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                                                 len
                                         );
 				}
-                                oldc = color;
 			}
 		} else if (rr->active && ev.type == rr->evbase + RRScreenChangeNotify) {
 			rre = (XRRScreenChangeNotifyEvent*)&ev;
@@ -342,7 +327,7 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 	char curs[] = {0, 0, 0, 0, 0, 0, 0, 0};
 	int i, ptgrab, kbgrab;
 	struct lock *lock;
-	XColor color, dummy;
+	XColor color = {0};
 	XSetWindowAttributes wa;
 	Cursor invisible;
 
@@ -352,15 +337,9 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 	lock->screen = screen;
 	lock->root = RootWindow(dpy, lock->screen);
 
-	for (i = 0; i < NUMCOLS; i++) {
-		XAllocNamedColor(dpy, DefaultColormap(dpy, lock->screen),
-		                 colorname[i], &color, &dummy);
-		lock->colors[i] = color.pixel;
-	}
-
 	/* init */
 	wa.override_redirect = 1;
-	wa.background_pixel = lock->colors[DEFAULT];
+        wa.background_pixel = background;
 	lock->win = XCreateWindow(dpy, lock->root, 0, 0,
 	                          DisplayWidth(dpy, lock->screen),
 	                          DisplayHeight(dpy, lock->screen),
@@ -370,6 +349,7 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 	                          CWOverrideRedirect | CWBackPixel, &wa);
 	lock->pmap = XCreateBitmapFromData(dpy, lock->win, curs, 8, 8);
 	invisible = XCreatePixmapCursor(dpy, lock->pmap, lock->pmap,
+	                                //&color, &color, 0, 0);
 	                                &color, &color, 0, 0);
 	XDefineCursor(dpy, lock->win, invisible);
 
