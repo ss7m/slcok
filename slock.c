@@ -135,7 +135,7 @@ drawborder(Display *dpy, Window w, GC gc, int swidth, int sheight)
 }
 
 static void
-drawdots(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
+drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
 {
         int cx = swidth / 2;
         int cy = sheight / 2;
@@ -164,10 +164,7 @@ drawdots(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
                         { cx - dst, cy - dst, cx + dst, cy + dst },
                         { cx - dst, cy + dst, cx + dst, cy - dst }
                 };
-                XDrawSegments(
-                        dpy, w, gc,
-                        segments, 2
-                );
+                XDrawSegments(dpy, w, gc, segments, 2);
                 XDrawArc(
                         dpy, w, gc,
                         cx - sheight / 4, cy - sheight / 4,
@@ -233,7 +230,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                         dims[screen].width,
                         dims[screen].height
                 );
-                drawdots(
+                drawscreen(
                         dpy,
                         locks[screen]->win,
                         gcs[screen],
@@ -291,7 +288,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			}
                         if (running) {
 				for (screen = 0; screen < nscreens; screen++) {
-                                        drawdots(
+                                        drawscreen(
                                                 dpy,
                                                 locks[screen]->win,
                                                 gcs[screen],
