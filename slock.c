@@ -152,8 +152,8 @@ drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
         } else {
                 XClearArea(
                         dpy, w,
-                        dotsize / 2, cy - dotarea / 2,
-                        swidth - dotsize, dotarea,
+                        dotsize / 4, cy - dotarea / 2,
+                        swidth - dotsize / 2, dotarea,
                         0
                 );
         }
