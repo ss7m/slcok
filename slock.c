@@ -163,8 +163,6 @@ drawdots(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
                 XSegment segments[2] = {
                         { cx - dst, cy - dst, cx + dst, cy + dst },
                         { cx - dst, cy + dst, cx + dst, cy - dst }
-                        //{ 0, 0,       swidth, sheight },
-                        //{ 0, sheight, swidth, 0 }
                 };
                 XDrawSegments(
                         dpy, w, gc,
