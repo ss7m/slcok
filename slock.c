@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <math.h>
 #include <sys/types.h>
 #include <X11/extensions/Xrandr.h>
 #include <X11/keysym.h>
@@ -158,13 +159,22 @@ drawdots(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
         }
 
         if (len == 0) {
+                int dst = (sheight / 4) * (sqrt(2) / 2);
                 XSegment segments[2] = {
-                        { 0, 0,       swidth, sheight },
-                        { 0, sheight, swidth, 0 }
+                        { cx - dst, cy - dst, cx + dst, cy + dst },
+                        { cx - dst, cy + dst, cx + dst, cy - dst }
+                        //{ 0, 0,       swidth, sheight },
+                        //{ 0, sheight, swidth, 0 }
                 };
                 XDrawSegments(
                         dpy, w, gc,
                         segments, 2
+                );
+                XDrawArc(
+                        dpy, w, gc,
+                        cx - sheight / 4, cy - sheight / 4,
+                        sheight / 2, sheight / 2,
+                        0, 360 * 64
                 );
         } else {
 
