@@ -8,5 +8,5 @@ static unsigned long foreground = 0x6B7089;
 /* treat a cleared input like a wrong password (color) */
 static const int failonclear = 0;
 
-static const int dotarea = 180;
-static const int dotsize = 140;
+static const int dotarea = 180; // 2160 / 12
+static const int dotsize = 144; // 2160 / 15
