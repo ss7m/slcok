@@ -133,6 +133,7 @@ drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
                         swidth - dotsize / 2, sheight - dotsize / 2,
                         0
                 );
+                XDrawRectangle(dpy, w, gc, 0, 0, swidth, sheight);
         } else {
                 XClearArea(
                         dpy, w,
@@ -155,6 +156,7 @@ drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
                         sheight / 2, sheight / 2,
                         0, 360 * 64
                 );
+                XDrawRectangle(dpy, w, gc, 0, 0, swidth, sheight);
         } else {
 
                 dots = malloc(sizeof(*dots) * len);
