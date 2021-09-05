@@ -119,21 +119,21 @@ gethash(void)
 }
 
 static void
-drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
+drawscreen_(Display *dpy, Window w, GC gc, int sx, int sy, int swidth, int sheight, int len)
 {
-        int cx = swidth / 2;
-        int cy = sheight / 2;
+        int cx = (sx + sx + swidth) / 2;
+        int cy = (sy + sy + sheight) / 2;
         int x;
         XArc *dots;
 
         if (len == 1) {
                 XClearArea(
                         dpy, w,
-                        dotsize / 4, dotsize / 4,
+                        sx + dotsize / 4, sy + dotsize / 4,
                         swidth - dotsize / 2, sheight - dotsize / 2,
                         0
                 );
-                XDrawRectangle(dpy, w, gc, 0, 0, swidth, sheight);
+                XDrawRectangle(dpy, w, gc, sx, sy, swidth, sheight);
         } else {
                 XClearArea(
                         dpy, w,
@@ -171,6 +171,19 @@ drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
                 }
                 XFillArcs(dpy, w, gc, dots, len);
                 free(dots);
+        }
+}
+
+// incredibly hacky solution to when i'm in dual monitor mode
+// "if my screen is really tall, divide it in two!!1!"
+static void
+drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
+{
+        if (sheight > swidth) {
+                drawscreen_(dpy, w, gc, 0, 0, swidth, sheight / 2, len);
+                drawscreen_(dpy, w, gc, 0, sheight / 2, swidth, sheight / 2, len);
+        } else {
+                drawscreen_(dpy, w, gc, 0, 0, swidth, sheight, len);
         }
 }
 
