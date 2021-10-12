@@ -29,7 +29,10 @@ struct lock {
 	int screen;
 	Window root, win;
 	Pixmap pmap;
-        int width, height;
+        int nmon;
+        struct {
+                int x, y, width, height;
+        } *monitors;
 };
 
 struct xrandr {
@@ -124,7 +127,7 @@ drawscreen_(Display *dpy, Window w, GC gc, int sx, int sy, int swidth, int sheig
         int cx = (sx + sx + swidth) / 2;
         int cy = (sy + sy + sheight) / 2;
         int x;
-        XArc *dots;
+        static XArc dots[128];
 
         if (len == 1) {
                 XClearArea(
@@ -156,10 +159,8 @@ drawscreen_(Display *dpy, Window w, GC gc, int sx, int sy, int swidth, int sheig
                         sheight / 2, sheight / 2,
                         0, 360 * 64
                 );
-                XDrawRectangle(dpy, w, gc, 0, 0, swidth, sheight);
+                XDrawRectangle(dpy, w, gc, sx, sy, swidth, sheight);
         } else {
-
-                dots = malloc(sizeof(*dots) * len);
                 x = cx - dotarea * (len / 2) + ((len % 2 == 0) ? dotarea/2 : 0);
                 for (int i = 0; i < len; i++) {
                         dots[i] = (XArc) {
@@ -170,20 +171,22 @@ drawscreen_(Display *dpy, Window w, GC gc, int sx, int sy, int swidth, int sheig
                         x += dotarea;
                 }
                 XFillArcs(dpy, w, gc, dots, len);
-                free(dots);
         }
 }
 
-// incredibly hacky solution to when i'm in dual monitor mode
-// "if my screen is really tall, divide it in two!!1!"
 static void
-drawscreen(Display *dpy, Window w, GC gc, int swidth, int sheight, int len)
+drawscreen(Display *dpy, GC gc, struct lock *lock, int len)
 {
-        if (sheight > swidth) {
-                drawscreen_(dpy, w, gc, 0, 0, swidth, sheight / 2, len);
-                drawscreen_(dpy, w, gc, 0, sheight / 2, swidth, sheight / 2, len);
-        } else {
-                drawscreen_(dpy, w, gc, 0, 0, swidth, sheight, len);
+        for (int i = 0; i < lock->nmon; i++) {
+                if (lock->monitors[i].width == 0) {
+                        continue;
+                }
+                drawscreen_(
+                        dpy, lock->win, gc,
+                        lock->monitors[i].x, lock->monitors[i].y,
+                        lock->monitors[i].width, lock->monitors[i].height,
+                        len
+                );
         }
 }
 
@@ -198,17 +201,14 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	KeySym ksym;
 	XEvent ev;
         GC *gcs;
-        struct { int width, height; } *dims;
 
 
 	len = 0;
 	running = 1;
 
         gcs = malloc(sizeof(*gcs) * nscreens);
-        dims = malloc(sizeof(*dims) * nscreens);
         for (screen = 0; screen < nscreens; screen++) {
                 XGCValues values;
-                XWindowAttributes wa;
 
                 values.foreground = foreground;
                 values.line_width = dotsize / 2;
@@ -218,26 +218,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                         &values
                 );
 
-                XGetWindowAttributes(dpy, locks[screen]->win, &wa);
-                dims[screen].width = wa.width;
-                dims[screen].height = wa.height;
-
-                XDrawRectangle(
-                        dpy,
-                        locks[screen]->win,
-                        gcs[screen],
-                        0, 0,
-                        dims[screen].width,
-                        dims[screen].height
-                );
-                drawscreen(
-                        dpy,
-                        locks[screen]->win,
-                        gcs[screen],
-                        dims[screen].width,
-                        dims[screen].height,
-                        0
-                );
+                drawscreen(dpy, gcs[screen], locks[screen], 0);
         }
 
 	while (running && !XNextEvent(dpy, &ev)) {
@@ -289,12 +270,8 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                         if (running) {
 				for (screen = 0; screen < nscreens; screen++) {
                                         drawscreen(
-                                                dpy,
-                                                locks[screen]->win,
-                                                gcs[screen],
-                                                dims[screen].width,
-                                                dims[screen].height,
-                                                len
+                                                dpy, gcs[screen],
+                                                locks[screen], len
                                         );
 				}
 			}
@@ -323,7 +300,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                 XFreeGC(dpy, gcs[screen]);
         }
         free(gcs);
-        free(dims);
 }
 
 static struct lock *
@@ -335,12 +311,24 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 	XColor color = {0};
 	XSetWindowAttributes wa;
 	Cursor invisible;
+        XRRScreenResources *xrrscr;
 
 	if (dpy == NULL || screen < 0 || !(lock = malloc(sizeof(struct lock))))
 		return NULL;
 
 	lock->screen = screen;
 	lock->root = RootWindow(dpy, lock->screen);
+
+        xrrscr = XRRGetScreenResources(dpy, lock->root);
+        lock->nmon = xrrscr->ncrtc;
+        lock->monitors = malloc(xrrscr->ncrtc * sizeof(*lock->monitors));
+        for (int i = 0; i < lock->nmon; i++) {
+                XRRCrtcInfo *info = XRRGetCrtcInfo(dpy, xrrscr, xrrscr->crtcs[i]);
+                lock->monitors[i].x = info->x;
+                lock->monitors[i].y = info->y;
+                lock->monitors[i].width = info->width;
+                lock->monitors[i].height = info->height;
+        }
 
 	/* init */
 	wa.override_redirect = 1;
@@ -354,7 +342,6 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 	                          CWOverrideRedirect | CWBackPixel, &wa);
 	lock->pmap = XCreateBitmapFromData(dpy, lock->win, curs, 8, 8);
 	invisible = XCreatePixmapCursor(dpy, lock->pmap, lock->pmap,
-	                                //&color, &color, 0, 0);
 	                                &color, &color, 0, 0);
 	XDefineCursor(dpy, lock->win, invisible);
 
