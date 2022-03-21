@@ -23,6 +23,8 @@
 #include "arg.h"
 #include "util.h"
 
+#include <time.h>
+
 char *argv0;
 
 struct lock {
@@ -217,12 +219,22 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                         GCForeground | GCLineWidth,
                         &values
                 );
+        }
 
-                drawscreen(dpy, gcs[screen], locks[screen], 0);
+        // fork off into child process
+        if (fork() != 0) {
+                exit(EXIT_SUCCESS);
         }
 
 	while (running && !XNextEvent(dpy, &ev)) {
-		if (ev.type == KeyPress) {
+                if (ev.type == Expose) {
+                        for (screen = 0; screen < nscreens; screen++) {
+                                drawscreen(dpy, gcs[screen], locks[screen], len);
+                                XMapWindow(dpy, locks[screen]->win);
+                                XRaiseWindow(dpy, locks[screen]->win);
+                        }
+                        XFlush(dpy);
+                } else if (ev.type == KeyPress) {
 			explicit_bzero(&buf, sizeof(buf));
 			num = XLookupString(&ev.xkey, buf, sizeof(buf), &ksym, 0);
 			if (IsKeypadKey(ksym)) {
@@ -333,13 +345,14 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 	/* init */
 	wa.override_redirect = 1;
         wa.background_pixel = background;
+        wa.event_mask = ExposureMask;
 	lock->win = XCreateWindow(dpy, lock->root, 0, 0,
 	                          DisplayWidth(dpy, lock->screen),
 	                          DisplayHeight(dpy, lock->screen),
 	                          0, DefaultDepth(dpy, lock->screen),
 	                          CopyFromParent,
 	                          DefaultVisual(dpy, lock->screen),
-	                          CWOverrideRedirect | CWBackPixel, &wa);
+	                          CWEventMask|CWOverrideRedirect|CWBackPixel, &wa);
 	lock->pmap = XCreateBitmapFromData(dpy, lock->win, curs, 8, 8);
 	invisible = XCreatePixmapCursor(dpy, lock->pmap, lock->pmap,
 	                                &color, &color, 0, 0);
