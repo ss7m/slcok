@@ -126,6 +126,13 @@ gethash(void)
 }
 
 static void
+set_linewidth(Display *dpy, GC gc, int linewidth)
+{
+        XGCValues values = { .line_width = linewidth };
+        XChangeGC(dpy, gc, GCLineWidth, &values);
+}
+
+static void
 drawscreen_(Display *dpy, Window w, GC gc, struct mon_dim *monitor, int len)
 {
         int sx = monitor->x;
@@ -139,21 +146,23 @@ drawscreen_(Display *dpy, Window w, GC gc, struct mon_dim *monitor, int len)
         int x;
         static XArc dots[128];
 
-        {
-                XGCValues values;
-                values.line_width = dotsize / 2;
-                XChangeGC(dpy, gc, GCLineWidth, &values);
-        }
-
-        XClearArea(
-                dpy, w,
-                sx + dotsize / 4, sy + dotsize / 4,
-                sw - dotsize / 2, sh - dotsize / 2,
-                0
-        );
+        set_linewidth(dpy, gc, dotsize / 2);
 
         if (len == 1) {
                 XDrawRectangle(dpy, w, gc, sx, sy, sw, sh);
+                XClearArea(
+                        dpy, w,
+                        sx + dotsize / 4, sy + dotsize / 4,
+                        sw - dotsize / 2, sh - dotsize / 2,
+                        0
+                );
+        } else {
+                XClearArea(
+                        dpy, w,
+                        sx + dotsize / 4, cy - dotarea / 2,
+                        sw - dotsize / 2, dotarea,
+                        0
+                );
         }
 
         if (len == 0) {
