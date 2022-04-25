@@ -27,14 +27,16 @@
 
 char *argv0;
 
+struct mon_dim {
+        int x, y, width, height;
+};
+
 struct lock {
 	int screen;
 	Window root, win;
 	Pixmap pmap;
         int nmon;
-        struct {
-                int x, y, width, height;
-        } *monitors;
+        struct mon_dim *monitors;
 };
 
 struct xrandr {
@@ -124,32 +126,38 @@ gethash(void)
 }
 
 static void
-drawscreen_(Display *dpy, Window w, GC gc, int sx, int sy, int swidth, int sheight, int len)
+drawscreen_(Display *dpy, Window w, GC gc, struct mon_dim *monitor, int len)
 {
-        int cx = (sx + sx + swidth) / 2;
-        int cy = (sy + sy + sheight) / 2;
+        int sx = monitor->x;
+        int sy = monitor->y;
+        int sw = monitor->width;
+        int sh = monitor->height;
+        int cx = sx + sw / 2;
+        int cy = sy + sh / 2;
+        int dotarea = sw / 20;
+        int dotsize = sw / 24;
         int x;
         static XArc dots[128];
 
+        {
+                XGCValues values;
+                values.line_width = dotsize / 2;
+                XChangeGC(dpy, gc, GCLineWidth, &values);
+        }
+
+        XClearArea(
+                dpy, w,
+                sx + dotsize / 4, sy + dotsize / 4,
+                sw - dotsize / 2, sh - dotsize / 2,
+                0
+        );
+
         if (len == 1) {
-                XClearArea(
-                        dpy, w,
-                        sx + dotsize / 4, sy + dotsize / 4,
-                        swidth - dotsize / 2, sheight - dotsize / 2,
-                        0
-                );
-                XDrawRectangle(dpy, w, gc, sx, sy, swidth, sheight);
-        } else {
-                XClearArea(
-                        dpy, w,
-                        dotsize / 4, cy - dotarea / 2,
-                        swidth - dotsize / 2, dotarea,
-                        0
-                );
+                XDrawRectangle(dpy, w, gc, sx, sy, sw, sh);
         }
 
         if (len == 0) {
-                int dst = (sheight / 4) * (sqrt(2) / 2);
+                int dst = (sh / 4) * (sqrt(2) / 2);
                 XSegment segments[2] = {
                         { cx - dst, cy - dst, cx + dst, cy + dst },
                         { cx - dst, cy + dst, cx + dst, cy - dst }
@@ -157,11 +165,11 @@ drawscreen_(Display *dpy, Window w, GC gc, int sx, int sy, int swidth, int sheig
                 XDrawSegments(dpy, w, gc, segments, 2);
                 XDrawArc(
                         dpy, w, gc,
-                        cx - sheight / 4, cy - sheight / 4,
-                        sheight / 2, sheight / 2,
+                        cx - sh / 4, cy - sh / 4,
+                        sh / 2, sh / 2,
                         0, 360 * 64
                 );
-                XDrawRectangle(dpy, w, gc, sx, sy, swidth, sheight);
+                XDrawRectangle(dpy, w, gc, sx, sy, sw, sh);
         } else {
                 x = cx - dotarea * (len / 2) + ((len % 2 == 0) ? dotarea/2 : 0);
                 for (int i = 0; i < len; i++) {
@@ -183,12 +191,7 @@ drawscreen(Display *dpy, GC gc, struct lock *lock, int len)
                 if (lock->monitors[i].width == 0) {
                         continue;
                 }
-                drawscreen_(
-                        dpy, lock->win, gc,
-                        lock->monitors[i].x, lock->monitors[i].y,
-                        lock->monitors[i].width, lock->monitors[i].height,
-                        len
-                );
+                drawscreen_(dpy, lock->win, gc, &lock->monitors[i], len);
         }
 }
 
@@ -213,11 +216,9 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
                 XGCValues values;
 
                 values.foreground = foreground;
-                values.line_width = dotsize / 2;
                 gcs[screen] = XCreateGC(
                         dpy, locks[screen]->win,
-                        GCForeground | GCLineWidth,
-                        &values
+                        GCForeground, &values
                 );
         }
 
